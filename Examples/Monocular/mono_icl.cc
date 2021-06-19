@@ -30,29 +30,24 @@
 
 using namespace std;
 
-void LoadImages(const string &strImagePath, const string &strPathTimes,
-                vector<string> &vstrImages, vector<double> &vTimeStamps);
+void LoadImages(const string &strFile, vector<string> &vstrImageFilenames,
+                vector<double> &vTimestamps);
 
 int main(int argc, char **argv)
 {
-    if(argc != 5)
+    if(argc != 4)
     {
-        cerr << endl << "Usage: ./mono_tum path_to_vocabulary path_to_settings path_to_image_folder path_to_times_file" << endl;
+        cerr << endl << "Usage: ./mono_tum path_to_vocabulary path_to_settings path_to_sequence" << endl;
         return 1;
     }
 
     // Retrieve paths to images
     vector<string> vstrImageFilenames;
     vector<double> vTimestamps;
-    LoadImages(string(argv[3]), string(argv[4]), vstrImageFilenames, vTimestamps);
+    string strFile = string(argv[3])+"/associations.txt";
+    LoadImages(strFile, vstrImageFilenames, vTimestamps);
 
     int nImages = vstrImageFilenames.size();
-
-    if(nImages<=0)
-    {
-        cerr << "ERROR: Failed to load images" << endl;
-        return 1;
-    }
 
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::MONOCULAR,true);
@@ -70,13 +65,13 @@ int main(int argc, char **argv)
     for(int ni=0; ni<nImages; ni++)
     {
         // Read image from file
-        im = cv::imread(vstrImageFilenames[ni],CV_LOAD_IMAGE_UNCHANGED);
+        im = cv::imread(string(argv[3])+"/"+vstrImageFilenames[ni],CV_LOAD_IMAGE_UNCHANGED);
         double tframe = vTimestamps[ni];
 
         if(im.empty())
         {
             cerr << endl << "Failed to load image at: "
-                 <<  vstrImageFilenames[ni] << endl;
+                 << string(argv[3]) << "/" << vstrImageFilenames[ni] << endl;
             return 1;
         }
 
@@ -100,11 +95,11 @@ int main(int argc, char **argv)
         vTimesTrack[ni]=ttrack;
 
         // Wait to load the next frame
-        double T=0;
-        if(ni<nImages-1)
-            T = vTimestamps[ni+1]-tframe;
-        else if(ni>0)
-            T = tframe-vTimestamps[ni-1];
+        double T=0.03;
+        //if(ni<nImages-1)
+        //    T = vTimestamps[ni+1]-tframe;
+       // else if(ni>0)
+        //    T = tframe-vTimestamps[ni-1];
 
         if(ttrack<T)
             usleep((T-ttrack)*1e6);
@@ -130,26 +125,37 @@ int main(int argc, char **argv)
     return 0;
 }
 
-void LoadImages(const string &strImagePath, const string &strPathTimes,
-                vector<string> &vstrImages, vector<double> &vTimeStamps)
+void LoadImages(const string &strFile, vector<string> &vstrImageFilenames, vector<double> &vTimestamps)
 {
-    ifstream fTimes;
-    fTimes.open(strPathTimes.c_str());
-    vTimeStamps.reserve(5000);
-    vstrImages.reserve(5000);
-    while(!fTimes.eof())
+    ifstream f;
+    f.open(strFile.c_str());
+    //ICL没有头三行注解，所以不用省略
+    // skip first three lines
+    //string s0;
+    //getline(f,s0);
+    //getline(f,s0);
+    //getline(f,s0);
+
+    while(!f.eof())
     {
         string s;
-        getline(fTimes,s);
+        getline(f,s);
         if(!s.empty())
         {
             stringstream ss;
             ss << s;
-            vstrImages.push_back(strImagePath + "/" + ss.str() + ".png");
+            //icl前两列是深度，略过
+            double tdepth;
+            string sdepth;
+            ss >> tdepth;
+            ss >> sdepth;
+            //开始RGB
             double t;
+            string sRGB;
             ss >> t;
-            vTimeStamps.push_back(t/1e9);
-
+            vTimestamps.push_back(t);
+            ss >> sRGB;
+            vstrImageFilenames.push_back(sRGB);
         }
     }
 }
